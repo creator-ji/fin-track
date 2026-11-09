@@ -4,14 +4,13 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Scanner;
 import java.util.stream.Collectors;
 
+import ru.fintrack.io.DataExchangeService;
 import ru.fintrack.io.ReportWriter;
 import ru.fintrack.io.WalletFileStorage;
 import ru.fintrack.model.Budget;
-import ru.fintrack.model.Category;
 import ru.fintrack.model.Transaction;
 import ru.fintrack.model.User;
 import ru.fintrack.model.Wallet;
@@ -21,6 +20,7 @@ import ru.fintrack.service.AuthService;
 import ru.fintrack.service.FinanceService;
 import ru.fintrack.service.StatisticsService;
 import ru.fintrack.service.TransferService;
+import ru.fintrack.ui.ConsoleFormatter;
 import ru.fintrack.validation.InputValidator;
 
 /**
@@ -31,9 +31,9 @@ public class Main {
     private static final String COMMANDS = String.join(
             " | ",
             "register", "login", "whoami", "logout",
-            "income", "expense", "budget", "balance", "budgets",
-            "stats", "categories", "report", "transfer",
-            "help", "exit"
+            "income", "expense", "budget", "edit-budget", "remove-budget", "rename-category",
+            "balance", "budgets", "stats", "categories", "report",
+            "export", "import", "transfer", "help", "exit"
     );
 
     public static void main(String[] args) {
@@ -44,10 +44,11 @@ public class Main {
         StatisticsService statisticsService = new StatisticsService(financeService);
         TransferService transferService = new TransferService(authService, userRepository, walletFileStorage);
         ReportWriter reportWriter = new ReportWriter();
+        DataExchangeService dataExchangeService = new DataExchangeService();
         Scanner scanner = new Scanner(System.in);
 
         System.out.println("=== FinTrack ===");
-        System.out.println("Команды: " + COMMANDS);
+        System.out.println("Введите help для списка команд и примеров.");
 
         boolean running = true;
         while (running) {
@@ -63,11 +64,16 @@ public class Main {
                     case "income" -> handleIncome(scanner, financeService);
                     case "expense" -> handleExpense(scanner, financeService);
                     case "budget" -> handleBudget(scanner, financeService);
+                    case "edit-budget" -> handleEditBudget(scanner, financeService);
+                    case "remove-budget" -> handleRemoveBudget(scanner, financeService);
+                    case "rename-category" -> handleRenameCategory(scanner, financeService);
                     case "balance" -> handleBalance(financeService);
                     case "budgets" -> handleBudgets(financeService);
                     case "stats" -> handleStats(statisticsService, reportWriter);
                     case "categories" -> handleCategories(scanner, statisticsService, reportWriter);
                     case "report" -> handleReport(scanner, authService, statisticsService, reportWriter);
+                    case "export" -> handleExport(scanner, authService, financeService, dataExchangeService);
+                    case "import" -> handleImport(scanner, financeService, dataExchangeService);
                     case "transfer" -> handleTransfer(scanner, financeService, transferService);
                     case "help" -> printHelp();
                     case "exit", "quit" -> {
@@ -141,7 +147,7 @@ public class Main {
         List<String> alerts = financeService.addExpense(category, amount, null);
         System.out.println("Расход добавлен: " + category.trim() + " — " + amount);
         System.out.println("Баланс: " + financeService.getBalance());
-        printAlerts(alerts);
+        ConsoleFormatter.printAlerts(alerts);
     }
 
     private static void handleBudget(Scanner scanner, FinanceService financeService) {
@@ -152,42 +158,47 @@ public class Main {
 
         Budget budget = financeService.setBudget(category, limit);
         System.out.println("Бюджет установлен: " + budget.getCategory().getName() + " — " + budget.getLimit());
-
         Double remaining = financeService.getWallet().getRemainingBudget(budget.getCategory());
         if (remaining != null) {
             System.out.println("Оставшийся бюджет: " + remaining);
-            if (remaining < 0) {
-                printAlerts(List.of(
-                        "Превышен бюджет по категории \"" + budget.getCategory().getName()
-                                + "\": остаток " + remaining + "."
-                ));
-            }
         }
+        ConsoleFormatter.printAlerts(financeService.checkBudgetAlerts());
+    }
+
+    private static void handleEditBudget(Scanner scanner, FinanceService financeService) {
+        System.out.print("Категория: ");
+        String category = scanner.nextLine();
+        System.out.print("Новый лимит: ");
+        double limit = InputValidator.parsePositiveAmount(scanner.nextLine());
+        Budget budget = financeService.updateBudget(category, limit);
+        System.out.println("Бюджет обновлён: " + budget.getCategory().getName() + " — " + budget.getLimit());
+        ConsoleFormatter.printAlerts(financeService.checkBudgetAlerts());
+    }
+
+    private static void handleRemoveBudget(Scanner scanner, FinanceService financeService) {
+        System.out.print("Категория: ");
+        String category = scanner.nextLine();
+        financeService.removeBudget(category);
+        System.out.println("Бюджет для категории \"" + category.trim() + "\" удалён.");
+    }
+
+    private static void handleRenameCategory(Scanner scanner, FinanceService financeService) {
+        System.out.print("Старое имя: ");
+        String oldName = scanner.nextLine();
+        System.out.print("Новое имя: ");
+        String newName = scanner.nextLine();
+        int changed = financeService.renameCategory(oldName, newName);
+        System.out.println("Категория переименована. Затронуто операций: " + changed + ".");
     }
 
     private static void handleBalance(FinanceService financeService) {
-        Wallet wallet = financeService.getWallet();
-        System.out.println("Баланс: " + wallet.getBalance());
-        System.out.println("Доходы: " + wallet.getTotalIncome());
-        System.out.println("Расходы: " + wallet.getTotalExpense());
-        printAlerts(financeService.checkBudgetAlerts());
+        System.out.println(ConsoleFormatter.formatBalanceSummary(financeService.getWallet()));
+        ConsoleFormatter.printAlerts(financeService.checkBudgetAlerts());
     }
 
     private static void handleBudgets(FinanceService financeService) {
-        Wallet wallet = financeService.getWallet();
-        Map<Category, Budget> budgets = wallet.getBudgets();
-        if (budgets.isEmpty()) {
-            System.out.println("Бюджеты не заданы.");
-            return;
-        }
-
-        System.out.println("Бюджет по категориям:");
-        for (Budget budget : budgets.values()) {
-            double remaining = wallet.getRemainingBudget(budget.getCategory());
-            System.out.println(budget.getCategory().getName() + ": " + budget.getLimit()
-                    + ", Оставшийся бюджет: " + remaining);
-        }
-        printAlerts(financeService.checkBudgetAlerts());
+        System.out.println(ConsoleFormatter.formatBudgetTable(financeService.getWallet()));
+        ConsoleFormatter.printAlerts(financeService.checkBudgetAlerts());
     }
 
     private static void handleTransfer(
@@ -203,7 +214,8 @@ public class Main {
         List<String> alerts = transferService.transfer(recipient, amount);
         System.out.println("Перевод " + amount + " пользователю \"" + recipient.trim() + "\" выполнен.");
         System.out.println("Ваш баланс: " + financeService.getBalance());
-        printAlerts(alerts);
+        ConsoleFormatter.printAlerts(alerts);
+        ConsoleFormatter.printAlerts(financeService.checkBudgetAlerts());
     }
 
     private static void handleStats(StatisticsService statisticsService, ReportWriter reportWriter) {
@@ -251,6 +263,54 @@ public class Main {
         throw new IllegalArgumentException("Укажите console или file.");
     }
 
+    private static void handleExport(
+            Scanner scanner,
+            AuthService authService,
+            FinanceService financeService,
+            DataExchangeService dataExchangeService
+    ) {
+        User user = authService.requireCurrentUser();
+        System.out.print("Формат (csv/json): ");
+        String format = scanner.nextLine().trim().toLowerCase();
+        Wallet wallet = financeService.getWallet();
+
+        if ("csv".equals(format)) {
+            Path path = Path.of("data", user.getLogin() + "-export.csv");
+            Path saved = dataExchangeService.exportCsv(wallet, path);
+            System.out.println("CSV экспортирован: " + saved);
+            return;
+        }
+        if ("json".equals(format)) {
+            Path path = Path.of("data", user.getLogin() + "-export.json");
+            Path saved = dataExchangeService.exportJson(wallet, path);
+            System.out.println("JSON экспортирован: " + saved);
+            return;
+        }
+        throw new IllegalArgumentException("Поддерживаются форматы: csv, json.");
+    }
+
+    private static void handleImport(
+            Scanner scanner,
+            FinanceService financeService,
+            DataExchangeService dataExchangeService
+    ) {
+        financeService.getWallet();
+        System.out.print("Формат (csv/json): ");
+        String format = scanner.nextLine().trim().toLowerCase();
+        System.out.print("Путь к файлу: ");
+        Path path = Path.of(scanner.nextLine().trim());
+
+        if ("csv".equals(format)) {
+            dataExchangeService.importCsv(financeService.getWallet(), path);
+        } else if ("json".equals(format)) {
+            dataExchangeService.importJson(financeService.getWallet(), path);
+        } else {
+            throw new IllegalArgumentException("Поддерживаются форматы: csv, json.");
+        }
+        System.out.println("Данные импортированы. Баланс: " + financeService.getBalance());
+        ConsoleFormatter.printAlerts(financeService.checkBudgetAlerts());
+    }
+
     private static List<String> parseCategoryList(String raw) {
         if (raw == null || raw.isBlank()) {
             throw new IllegalArgumentException("Список категорий пуст.");
@@ -268,27 +328,36 @@ public class Main {
     private static void printHelp() {
         System.out.println("""
                 Доступные команды:
-                  register    — регистрация пользователя
-                  login       — вход и загрузка кошелька из файла
-                  whoami      — текущий пользователь
-                  logout      — выход с сохранением кошелька
-                  income      — добавить доход
-                  expense     — добавить расход
-                  budget      — установить бюджет категории
-                  balance     — баланс, доходы и расходы
-                  budgets     — бюджеты и оставшиеся лимиты
-                  stats       — полный отчёт в терминал
-                  categories  — подсчёт по выбранным категориям
-                  report      — отчёт в терминал или файл
-                  transfer    — перевод другому пользователю
-                  help        — эта справка
-                  exit        — сохранить данные и выйти
-                """);
-    }
+                  register         — регистрация (пример: alice / secret)
+                  login            — вход и загрузка кошелька
+                  whoami           — текущий пользователь
+                  logout           — выход с сохранением
+                  income           — доход: категория + сумма
+                  expense          — расход: категория + сумма
+                  budget           — создать бюджет категории
+                  edit-budget      — изменить лимит бюджета
+                  remove-budget    — удалить бюджет
+                  rename-category  — переименовать категорию во всех операциях
+                  balance          — таблица баланс/доходы/расходы
+                  budgets          — таблица бюджетов и остатков
+                  stats            — полный отчёт
+                  categories       — подсчёт по списку категорий через запятую
+                  report           — отчёт в console или file
+                  export           — экспорт снимка в csv/json
+                  import           — импорт снимка из csv/json
+                  transfer         — перевод другому пользователю по логину
+                  help             — эта справка с примерами
+                  exit             — сохранить и выйти
 
-    private static void printAlerts(List<String> alerts) {
-        for (String alert : alerts) {
-            System.out.println("Внимание: " + alert);
-        }
+                Примеры:
+                  > income
+                    Категория: Зарплата
+                    Сумма: 20000
+                  > categories
+                    Категории через запятую: Еда, Такси
+                  > export
+                    Формат (csv/json): json
+                """);
+        System.out.println("Краткий список: " + COMMANDS);
     }
 }
