@@ -14,10 +14,27 @@ public class Transaction {
     }
 
     public Transaction(TransactionType type, Category category, double amount, String comment) {
+        if (type == null) {
+            throw new IllegalArgumentException("Тип операции обязателен.");
+        }
+        if (category == null) {
+            throw new IllegalArgumentException("Категория обязательна.");
+        }
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Сумма должна быть больше нуля.");
+        }
         this.type = type;
         this.category = category;
         this.amount = amount;
         this.comment = comment;
+    }
+
+    public static Transaction income(Category category, double amount, String comment) {
+        return new Transaction(TransactionType.INCOME, category, amount, comment);
+    }
+
+    public static Transaction expense(Category category, double amount, String comment) {
+        return new Transaction(TransactionType.EXPENSE, category, amount, comment);
     }
 
     public TransactionType getType() {
@@ -34,6 +51,14 @@ public class Transaction {
 
     public String getComment() {
         return comment;
+    }
+
+    public boolean isIncome() {
+        return type == TransactionType.INCOME;
+    }
+
+    public boolean isExpense() {
+        return type == TransactionType.EXPENSE;
     }
 
     @Override

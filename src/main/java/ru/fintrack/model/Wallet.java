@@ -152,6 +152,13 @@ public class Wallet {
         return sum;
     }
 
+    /**
+     * Пересчёт знакового вклада операции в баланс.
+     */
+    public static double signedAmount(Transaction transaction) {
+        return transaction.isIncome() ? transaction.getAmount() : -transaction.getAmount();
+    }
+
     private double sumByTypeAndCategory(TransactionType type, Category category) {
         double sum = 0.0;
         for (Transaction transaction : transactions) {

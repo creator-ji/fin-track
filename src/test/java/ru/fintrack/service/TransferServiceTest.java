@@ -28,7 +28,7 @@ class TransferServiceTest {
         WalletFileStorage storage = new WalletFileStorage(tempDir);
         authService = new AuthService(repository, storage);
         financeService = new FinanceService(authService);
-        transferService = new TransferService(authService, repository, storage);
+        transferService = new TransferService(authService, storage);
 
         authService.register("alice", "secret");
         authService.register("bob", "secret");

@@ -16,12 +16,13 @@ import ru.fintrack.model.Transaction;
 import ru.fintrack.model.TransactionType;
 import ru.fintrack.model.User;
 import ru.fintrack.model.Wallet;
+import ru.fintrack.repository.UserStorage;
 
 /**
  * Сохранение и загрузка пользователя с кошельком в файл.
  * Формат: секции USER / TRANSACTIONS / BUDGETS.
  */
-public class WalletFileStorage {
+public class WalletFileStorage implements UserStorage {
 
     private static final String SECTION_USER = "#USER";
     private static final String SECTION_TRANSACTIONS = "#TRANSACTIONS";
@@ -37,6 +38,7 @@ public class WalletFileStorage {
         return dataDirectory.resolve(sanitizeFileName(login) + ".wallet");
     }
 
+    @Override
     public void save(User user) {
         Path file = resolveUserFile(user.getLogin());
         try {
@@ -77,6 +79,7 @@ public class WalletFileStorage {
         }
     }
 
+    @Override
     public Optional<User> load(String login) {
         Path file = resolveUserFile(login);
         if (!Files.isRegularFile(file)) {
@@ -117,7 +120,7 @@ public class WalletFileStorage {
             }
 
             User user = new User(storedLogin, password);
-            copyWallet(wallet, user.getWallet());
+            UserStorage.copyWallet(wallet, user.getWallet());
             return Optional.of(user);
         } catch (IOException e) {
             throw new IllegalStateException("Не удалось загрузить данные пользователя \""
@@ -125,22 +128,21 @@ public class WalletFileStorage {
         }
     }
 
+    @Override
     public void loadWalletInto(User user) {
         Optional<User> loaded = load(user.getLogin());
         if (loaded.isEmpty()) {
             return;
         }
-        copyWallet(loaded.get().getWallet(), user.getWallet());
+        UserStorage.copyWallet(loaded.get().getWallet(), user.getWallet());
     }
 
+    /**
+     * @deprecated используйте {@link UserStorage#copyWallet(Wallet, Wallet)}
+     */
+    @Deprecated
     public static void copyWallet(Wallet source, Wallet target) {
-        target.clear();
-        for (Transaction transaction : source.getTransactions()) {
-            target.addTransaction(transaction);
-        }
-        for (Budget budget : source.getBudgets().values()) {
-            target.setBudget(budget);
-        }
+        UserStorage.copyWallet(source, target);
     }
 
     private static Transaction parseTransaction(String line) {

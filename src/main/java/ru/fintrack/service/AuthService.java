@@ -1,8 +1,8 @@
 package ru.fintrack.service;
 
-import ru.fintrack.io.WalletFileStorage;
 import ru.fintrack.model.User;
 import ru.fintrack.repository.UserRepository;
+import ru.fintrack.repository.UserStorage;
 import ru.fintrack.validation.InputValidator;
 
 /**
@@ -11,12 +11,12 @@ import ru.fintrack.validation.InputValidator;
 public class AuthService {
 
     private final UserRepository userRepository;
-    private final WalletFileStorage walletFileStorage;
+    private final UserStorage userStorage;
     private User currentUser;
 
-    public AuthService(UserRepository userRepository, WalletFileStorage walletFileStorage) {
+    public AuthService(UserRepository userRepository, UserStorage userStorage) {
         this.userRepository = userRepository;
-        this.walletFileStorage = walletFileStorage;
+        this.userStorage = userStorage;
     }
 
     public User register(String login, String password) {
@@ -24,13 +24,12 @@ public class AuthService {
         InputValidator.requireNonBlank(password, "пароль");
 
         String normalizedLogin = login.trim();
-        if (userRepository.existsByLogin(normalizedLogin) || walletFileStorage.load(normalizedLogin).isPresent()) {
+        if (userRepository.existsByLogin(normalizedLogin) || userStorage.load(normalizedLogin).isPresent()) {
             throw new IllegalArgumentException("Пользователь с логином \"" + normalizedLogin + "\" уже существует.");
         }
 
         User user = new User(normalizedLogin, password);
-        userRepository.save(user);
-        walletFileStorage.save(user);
+        persist(user);
         return user;
     }
 
@@ -39,42 +38,50 @@ public class AuthService {
         InputValidator.requireNonBlank(password, "пароль");
 
         if (currentUser != null) {
-            walletFileStorage.save(currentUser);
+            userStorage.save(currentUser);
         }
 
         String normalizedLogin = login.trim();
-        User user = userRepository.findByLogin(normalizedLogin)
-                .or(() -> walletFileStorage.load(normalizedLogin))
-                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден."));
+        User user = findExistingUser(normalizedLogin);
 
         if (!user.matchesPassword(password)) {
             throw new IllegalArgumentException("Неверный пароль.");
         }
 
-        walletFileStorage.loadWalletInto(user);
-        userRepository.save(user);
+        userStorage.loadWalletInto(user);
+        persist(user);
         currentUser = user;
         return user;
     }
 
     public void logout() {
         if (currentUser != null) {
-            walletFileStorage.save(currentUser);
+            userStorage.save(currentUser);
             currentUser = null;
         }
     }
 
-    /**
-     * Сохраняет данные текущего пользователя (вызывать при выходе из приложения).
-     */
     public void saveCurrentUser() {
         if (currentUser != null) {
-            walletFileStorage.save(currentUser);
+            userStorage.save(currentUser);
         }
     }
 
-    public void saveUser(User user) {
-        walletFileStorage.save(user);
+    public void persist(User user) {
+        userRepository.save(user);
+        userStorage.save(user);
+    }
+
+    /**
+     * Ищет пользователя в памяти или на диске.
+     */
+    public User findExistingUser(String login) {
+        InputValidator.requireNonBlank(login, "логин");
+        String normalized = login.trim();
+        return userRepository.findByLogin(normalized)
+                .or(() -> userStorage.load(normalized))
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Пользователь с логином \"" + normalized + "\" не найден."));
     }
 
     public User getCurrentUser() {

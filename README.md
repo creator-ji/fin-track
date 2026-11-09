@@ -34,23 +34,25 @@ java -jar target/fin-track-1.0-SNAPSHOT.jar
 ## Архитектура
 
 ```text
-CLI (Main + ui.ConsoleFormatter)
-    → service (Auth / Finance / Statistics / Transfer)
-        → repository (UserRepository / InMemoryUserRepository)
-        → io (WalletFileStorage, DataExchangeService, ReportWriter)
-        → model (User, Wallet, Transaction, Budget, Category)
+Main
+  → ui.ConsoleApplication (цикл + DI)
+      → CommandRegistry / FinTrackCommands (Command)
+      → service (Auth / Finance / Alert / Statistics / Transfer)
+          → repository (UserRepository, UserStorage)
+          → io (WalletFileStorage, DataExchangeService, ReportWriter)
+          → model (User, Wallet, Transaction, Budget, Category)
 ```
 
 Слои:
 
 | Пакет | Роль |
 |-------|------|
-| `model` | Доменные сущности |
-| `repository` | Хранение пользователей в памяти (интерфейс + реализация) |
-| `service` | Бизнес-логика |
+| `model` | Доменные сущности, фабрики `Transaction.income/expense` |
+| `repository` | Абстракции памяти (`UserRepository`) и диска (`UserStorage`) |
+| `service` | Бизнес-логика; оповещения вынесены в `AlertService` |
 | `validation` | Проверка ввода |
 | `io` | Файлы кошелька, CSV/JSON, текстовые отчёты |
-| `ui` | Форматирование таблиц CLI |
+| `ui` | CLI: Command-паттерн, ввод, таблицы |
 
 Подробнее: [docs/MODULES.md](docs/MODULES.md).
 

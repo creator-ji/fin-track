@@ -11,6 +11,7 @@ import ru.fintrack.model.Category;
 import ru.fintrack.model.Transaction;
 import ru.fintrack.model.TransactionType;
 import ru.fintrack.model.Wallet;
+import ru.fintrack.repository.UserStorage;
 
 /**
  * Экспорт и импорт снимка кошелька в CSV и JSON (без внешних библиотек).
@@ -98,7 +99,7 @@ public class DataExchangeService {
                     throw new IllegalArgumentException("Неизвестная секция CSV: " + section);
                 }
             }
-            WalletFileStorage.copyWallet(loaded, wallet);
+            UserStorage.copyWallet(loaded, wallet);
         } catch (IOException e) {
             throw new IllegalStateException("Не удалось импортировать CSV: " + e.getMessage(), e);
         }
@@ -130,7 +131,7 @@ public class DataExchangeService {
                 loaded.setBudget(new Budget(new Category(category), limit));
             }
 
-            WalletFileStorage.copyWallet(loaded, wallet);
+            UserStorage.copyWallet(loaded, wallet);
         } catch (IOException e) {
             throw new IllegalStateException("Не удалось импортировать JSON: " + e.getMessage(), e);
         }
