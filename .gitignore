@@ -1,0 +1,12 @@
+target/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+*.class
+data/*.txt
+data/*.json
+data/*.wallet
+!data/.gitkeep
