@@ -30,8 +30,65 @@ public class Wallet {
         return budgets.get(category);
     }
 
+    public boolean removeBudget(Category category) {
+        return budgets.remove(category) != null;
+    }
+
     public Map<Category, Budget> getBudgets() {
         return Collections.unmodifiableMap(budgets);
+    }
+
+    /**
+     * Переименовывает категорию во всех операциях и бюджетах.
+     *
+     * @return число затронутых операций
+     */
+    public int renameCategory(Category oldCategory, Category newCategory) {
+        if (oldCategory.equals(newCategory)) {
+            return 0;
+        }
+        if (!containsCategory(oldCategory)) {
+            throw new IllegalArgumentException("Категория \"" + oldCategory.getName() + "\" не найдена.");
+        }
+        if (containsCategory(newCategory) && !oldCategory.equals(newCategory)) {
+            throw new IllegalArgumentException("Категория \"" + newCategory.getName() + "\" уже существует.");
+        }
+
+        List<Transaction> updated = new ArrayList<>();
+        int changed = 0;
+        for (Transaction transaction : transactions) {
+            if (transaction.getCategory().equals(oldCategory)) {
+                updated.add(new Transaction(
+                        transaction.getType(),
+                        newCategory,
+                        transaction.getAmount(),
+                        transaction.getComment()
+                ));
+                changed++;
+            } else {
+                updated.add(transaction);
+            }
+        }
+        transactions.clear();
+        transactions.addAll(updated);
+
+        Budget oldBudget = budgets.remove(oldCategory);
+        if (oldBudget != null) {
+            budgets.put(newCategory, new Budget(newCategory, oldBudget.getLimit()));
+        }
+        return changed;
+    }
+
+    public boolean containsCategory(Category category) {
+        if (budgets.containsKey(category)) {
+            return true;
+        }
+        for (Transaction transaction : transactions) {
+            if (transaction.getCategory().equals(category)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
