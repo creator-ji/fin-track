@@ -105,7 +105,8 @@ mvn test
 mvn verify
 ```
 
-CI: `.github/workflows/ci.yml` (compile + test + checkstyle).
+CI: `.github/workflows/ci.yml` (compile + test + checkstyle).  
+Правила стиля: [`config/checkstyle.xml`](config/checkstyle.xml) (не Google Style — под 4 пробела и стиль проекта).
 
 ### Ручной сценарий из ТЗ
 
